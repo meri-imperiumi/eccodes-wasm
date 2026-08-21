@@ -87,32 +87,47 @@ def check_eccodes_source(source_dir):
 
 
 def patch_eccodes_cmake(source_dir):
-    """Patch ecCodes CMakeLists.txt to allow Emscripten (bypass 64-bit check).
+    """Patch ecCodes CMakeLists.txt to allow Emscripten.
 
-    ecCodes requires 64-bit platforms, but Emscripten's wasm may report 32-bit
-    during cmake try-compile checks. Add an exception for CMAKE_SYSTEM_NAME
-    Emscripten so the build proceeds.
+    Two patches are applied:
+    1. Bypass the 64-bit OS check (Emscripten may report 32-bit during try-compile)
+    2. Make find_package(Threads) optional (Emscripten has no pthreads, but
+       ecCodes doesn't use threads when HAVE_ECCODES_THREADS is false)
     """
     cmake_file = source_dir / "CMakeLists.txt"
     if not cmake_file.exists():
         return
 
     content = cmake_file.read_text()
+    patched = False
 
-    # The original line (unpatched):
-    #   if( NOT EC_OS_BITS EQUAL "64" )
-    #   ecbuild_critical( "Operating system ${CMAKE_SYSTEM} (${EC_OS_BITS} bits) -- ecCodes only supports 64 bit platforms" )
-    #
-    # The patched line adds: AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten"
+    # Patch 1: Add Emscripten exception to the 64-bit OS check
     old_check = 'if( NOT EC_OS_BITS EQUAL "64" )'
     new_check = 'if( NOT EC_OS_BITS EQUAL "64" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten" )'
 
     if old_check in content and new_check not in content:
         content = content.replace(old_check, new_check, 1)
-        cmake_file.write_text(content)
-        print(f"Patched {cmake_file}: added Emscripten 32-bit exception")
+        patched = True
+        print(f"Patched ecCodes CMakeLists.txt: added Emscripten 32-bit exception")
     elif new_check in content:
-        print(f"ecCodes CMakeLists.txt already patched for Emscripten")
+        print(f"ecCodes CMakeLists.txt: 64-bit check already patched")
+
+    # Patch 2: Make find_package(Threads) optional for Emscripten (no pthreads)
+    old_threads = 'find_package(Threads REQUIRED)'
+    new_threads = '''# Emscripten has no pthreads; threads are unused (HAVE_ECCODES_THREADS is false)
+if( NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten" )
+    find_package(Threads REQUIRED)
+endif()'''
+
+    if old_threads in content and new_threads not in content:
+        content = content.replace(old_threads, new_threads, 1)
+        patched = True
+        print(f"Patched ecCodes CMakeLists.txt: made Threads optional for Emscripten")
+    elif new_threads in content:
+        print(f"ecCodes CMakeLists.txt: Threads check already patched")
+
+    if patched:
+        cmake_file.write_text(content)
 
 
 def git_clone(repo_url, tag, dest_dir):
