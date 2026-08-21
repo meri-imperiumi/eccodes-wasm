@@ -425,6 +425,7 @@ async function createEccodes(moduleOrPath, options = {}) {
             path.join(__dirname, 'eccodes.js'),  // same dir as wrapper (when in build/eccodes)
         ];
         let loaded = false;
+        const errors = [];
         for (const candidate of candidates) {
             try {
                 const mod = require(candidate);
@@ -433,14 +434,16 @@ async function createEccodes(moduleOrPath, options = {}) {
                     module = await createModule(options);
                     loaded = true;
                     break;
+                } else {
+                    errors.push(`${candidate}: export is not a function (got ${typeof createModule})`);
                 }
             } catch (e) {
-                // Try next candidate
+                errors.push(`${candidate}: ${e.message}`);
             }
         }
         if (!loaded) {
             throw new EccodesError(
-                `Failed to load WASM module. ` +
+                `Failed to load WASM module. Tried:\n  - ${errors.join('\n  - ')}\n` +
                 `Pass the module path explicitly: createEccodes('/path/to/eccodes.js').`, -1
             );
         }
