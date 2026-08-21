@@ -27,6 +27,22 @@ def run_command(cmd, cwd=None, env=None):
     return True
 
 
+def run_command_capture(cmd, cwd=None, env=None):
+    """Run a command, capturing output. Returns (success, stdout, stderr)."""
+    print(f"Running: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=cwd, env=env, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        print(f"Command failed with code {result.returncode}")
+        if result.stdout:
+            print("--- stdout ---")
+            print(result.stdout[-3000:])  # last 3000 chars
+        if result.stderr:
+            print("--- stderr ---")
+            print(result.stderr[-3000:])
+        sys.exit(1)
+    return True, result.stdout, result.stderr
+
+
 def check_emscripten():
     """Check if emcc is available."""
     try:
@@ -131,7 +147,7 @@ def build_openjpeg(src_dir, build_dir, install_dir, arch_cmake_flags=None):
 
 def build_libaec(src_dir, build_dir, install_dir, arch_cmake_flags=None):
     """Build libaec (Adaptive Entropy Coding) with Emscripten"""
-    AEC_REPO = "https://gitlab.dkrz.de/k202009/libaec.git"
+    AEC_REPO = "https://github.com/MathisRosenhauer/libaec.git"
     AEC_TAG = "v1.1.4"
 
     print("\nBuilding libaec for WASM...")
@@ -151,13 +167,15 @@ def build_libaec(src_dir, build_dir, install_dir, arch_cmake_flags=None):
         f"-DCMAKE_INSTALL_PREFIX={aec_install_dir}",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DBUILD_SHARED_LIBS=OFF",
+        "-DBUILD_TESTING=OFF",
     ] + (arch_cmake_flags or [])
     run_command(cmake_args)
 
-    # Build (use cmake directly; emcmake only needed for configure)
+    # Build only the aec static library (not tests/tools)
     build_args = [
         "cmake",
         "--build", str(aec_build_dir),
+        "--target", "aec-static", "sz-static",
         "--parallel", str(os.cpu_count() or 4),
     ]
     run_command(build_args)
