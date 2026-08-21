@@ -352,6 +352,10 @@ def main():
         "-DIEEE_LE=1",
         "-DBUILD_SHARED_LIBS=OFF",
         "-DENABLE_USE_SHARED_LIB_AEC=OFF",
+        # Emscripten's sysroot provides fmemopen, but cmake try-compile checks
+        # fail in cross-compile, so force-enable to avoid the static fallback
+        # which conflicts with stdio.h's declaration
+        "-DECCODES_HAVE_FMEMOPEN=ON",
         f"-DCMAKE_PREFIX_PATH={cmake_prefix_path}",
     ] + package_dir_args + arch_cmake_flags
 
