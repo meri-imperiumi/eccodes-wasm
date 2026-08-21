@@ -71,7 +71,7 @@ if [ -n "$CUSTOM_URL" ]; then
     FILENAME=$(basename "$URL")
 else
     FILENAME="eccodes-${VERSION}-Source.tar.gz"
-    URL="https://confluence.ecmwf.int/download/attachments/45757960/${FILENAME}?api=v2"
+    URL="https://github.com/ecmwf/eccodes/archive/refs/tags/${VERSION}.tar.gz"
 fi
 
 PACKAGE_PATH="${PACKAGES_DIR}/${FILENAME}"

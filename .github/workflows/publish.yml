@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,11 +41,18 @@ jobs:
       - name: Setup ecCodes
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            make download VERSION=${{ github.event.inputs.version }}
+            VERSION=${{ github.event.inputs.version }}
           else
-            TAG=${GITHUB_REF#refs/tags/v}
-            make setup TAG=${TAG}
+            VERSION=${GITHUB_REF#refs/tags/v}
+            # Strip package version suffix (e.g., v1.0.0 -> 2.48.1 for eccodes)
+            if ! git ls-remote --tags https://github.com/ecmwf/eccodes.git | grep -q "refs/tags/${VERSION}"; then
+              VERSION=2.48.1
+            fi
           fi
+          if [ ! -d eccodes/CMakeLists.txt ]; then
+            git clone --depth 1 --branch ${VERSION} https://github.com/ecmwf/eccodes.git eccodes
+          fi
+          echo "ecCodes version: $(cat eccodes/VERSION)"
 
       - name: Build Release
         run: make release
@@ -67,8 +72,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -76,6 +79,22 @@ jobs:
           node-version: '20'
           registry-url: https://registry.npmjs.org/
           package-manager-cache: false  # never use caching in release builds
+
+      - name: Install Emscripten
+        uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: '3.1.58'
+
+      - name: Install CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Setup ecCodes
+        run: |
+          if [ ! -d eccodes/CMakeLists.txt ]; then
+            git clone --depth 1 --branch 2.48.1 https://github.com/ecmwf/eccodes.git eccodes
+          fi
 
       - name: Build Release
         run: make release

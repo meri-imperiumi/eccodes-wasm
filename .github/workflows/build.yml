@@ -23,8 +23,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -42,7 +40,10 @@ jobs:
           cmake-version: '3.27.x'
 
       - name: Setup ecCodes
-        run: make download VERSION=2.49.0
+        run: |
+          if [ ! -d eccodes/CMakeLists.txt ]; then
+            git clone --depth 1 --branch 2.48.1 https://github.com/ecmwf/eccodes.git eccodes
+          fi
 
       - name: Build
         run: |

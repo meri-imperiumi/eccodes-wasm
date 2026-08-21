@@ -108,10 +108,12 @@ show-version:
 		echo "Error: ecCodes not found. Run 'make setup' or 'make download'."; \
 	fi
 
-# CI targets (requires VERSION variable)
+# CI targets
 ci-setup:
 	@echo "CI Setup..."
-	@./scripts/download.sh --version ${VERSION}
+	@if [ ! -d eccodes/CMakeLists.txt ]; then \
+		git clone --depth 1 --branch ${VERSION} https://github.com/ecmwf/eccodes.git eccodes; \
+	fi
 
 ci-build:
 	@echo "CI Build..."
