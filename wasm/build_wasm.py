@@ -86,6 +86,35 @@ def check_eccodes_source(source_dir):
     return version
 
 
+def patch_eccodes_cmake(source_dir):
+    """Patch ecCodes CMakeLists.txt to allow Emscripten (bypass 64-bit check).
+
+    ecCodes requires 64-bit platforms, but Emscripten's wasm may report 32-bit
+    during cmake try-compile checks. Add an exception for CMAKE_SYSTEM_NAME
+    Emscripten so the build proceeds.
+    """
+    cmake_file = source_dir / "CMakeLists.txt"
+    if not cmake_file.exists():
+        return
+
+    content = cmake_file.read_text()
+
+    # The original line (unpatched):
+    #   if( NOT EC_OS_BITS EQUAL "64" )
+    #   ecbuild_critical( "Operating system ${CMAKE_SYSTEM} (${EC_OS_BITS} bits) -- ecCodes only supports 64 bit platforms" )
+    #
+    # The patched line adds: AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten"
+    old_check = 'if( NOT EC_OS_BITS EQUAL "64" )'
+    new_check = 'if( NOT EC_OS_BITS EQUAL "64" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten" )'
+
+    if old_check in content and new_check not in content:
+        content = content.replace(old_check, new_check, 1)
+        cmake_file.write_text(content)
+        print(f"Patched {cmake_file}: added Emscripten 32-bit exception")
+    elif new_check in content:
+        print(f"ecCodes CMakeLists.txt already patched for Emscripten")
+
+
 def git_clone(repo_url, tag, dest_dir):
     """Clone a git repository at a specific tag"""
     if dest_dir.exists():
@@ -227,7 +256,14 @@ def main():
     if target_bits == 64:
         os.environ["CFLAGS"] = os.environ.get("CFLAGS", "") + " -m64"
         os.environ["CXXFLAGS"] = os.environ.get("CXXFLAGS", "") + " -m64"
-        arch_cmake_flags = ["-DCMAKE_C_FLAGS=-m64", "-DCMAKE_CXX_FLAGS=-m64"]
+        os.environ["LDFLAGS"] = os.environ.get("LDFLAGS", "") + " -m64"
+        arch_cmake_flags = [
+            "-DCMAKE_C_FLAGS=-m64",
+            "-DCMAKE_CXX_FLAGS=-m64",
+            "-DCMAKE_EXE_LINKER_FLAGS=-m64",
+            "-DCMAKE_SHARED_LINKER_FLAGS=-m64",
+            "-DCMAKE_MODULE_LINKER_FLAGS=-m64",
+        ]
         print("Building for wasm64 (64-bit pointers)")
     else:
         arch_cmake_flags = []
@@ -238,6 +274,9 @@ def main():
 
     # Check ecCodes source
     ecodes_version = check_eccodes_source(source_dir)
+
+    # Patch ecCodes CMakeLists.txt to allow Emscripten (32-bit exception)
+    patch_eccodes_cmake(source_dir)
 
     # Create directories
     build_dir.mkdir(parents=True, exist_ok=True)
