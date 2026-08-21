@@ -70,14 +70,45 @@ async function main() {
 
     console.log('Ni:', ni);
 
-    // Cleanup
-    eccodes._codes_handle_delete(handle);
+    // ⚠️ IMPORTANT: Always delete handles and free pointers to prevent memory leaks
+    eccodes._codes_handle_delete_wrapper(handle);
 }
 
 main().catch(console.error);
 ```
 
+### Memory Management (Low-Level API)
+
+**CRITICAL**: When using the low-level Emscripten bindings directly, you must manage all memory manually:
+
+```javascript
+// ✓ Correct - manual memory management
+const handle = eccodes._codes_handle_new_from_file('data.grib', 0);
+const ptr = eccodes._malloc(8);
+eccodes._codes_get_long(handle, 'Ni', ptr);
+eccodes._free(ptr);
+eccodes._codes_handle_delete_wrapper(handle);
+
+// ✗ Incorrect - memory leak
+const handle = eccodes._codes_handle_new_from_file('data.grib', 0);
+const ptr = eccodes._malloc(8);
+eccodes._codes_get_long(handle, 'Ni', ptr);
+// Memory never freed!
+```
+
+**Resources requiring cleanup:**
+- Handles: `_codes_handle_delete_wrapper(handle)`
+- Allocated pointers: `_free(ptr)`
+
 ## Current Limitations
+
+### v1.0
+- **Node.js only** - Browser support planned for v2.0
+- **Manual memory management** - Must explicitly free handles and pointers
+- **No TypeScript definitions** - Coming in v2.0
+- **PNG disabled** - libpng requires additional configuration
+- **File I/O** - Uses Emscripten's virtual filesystem; files must be preloaded
+- **Memory** - Limited to 512MB by default (configurable in build_wasm.py)
 
 1. **PNG disabled** - libpng requires additional configuration
 2. **File I/O** - Uses Emscripten's virtual filesystem; files must be preloaded

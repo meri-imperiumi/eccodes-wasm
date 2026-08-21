@@ -78,11 +78,27 @@ async function main() {
     const values = handle.getDoubleArray('values');
     console.log(`Read ${values.length} values`);
 
-    // Cleanup
+    // ⚠️ IMPORTANT: Always delete handles to free WASM memory
     handle.delete();
 }
 
 main();
+```
+
+### Memory Management
+
+**CRITICAL**: WebAssembly does not have automatic garbage collection for C-allocated memory. You must manually free resources:
+
+```javascript
+// ✓ Correct - manual cleanup
+const handle = eccodes.openGrib('file.grib');
+// ... use handle ...
+handle.delete();  // Frees WASM memory
+
+// ✗ Incorrect - memory leak
+const handle = eccodes.openGrib('file.grib');
+// ... use handle ...
+// Memory never freed!
 ```
 
 ## Documentation
@@ -112,6 +128,16 @@ main();
 Enable JPEG: `python wasm/build_wasm.py --enable-jpg`
 
 ## API Reference
+
+### Memory Lifecycle
+
+| Resource | Created By | Must Be Freed By |
+|----------|------------|-----------------|
+| `CodesHandle` | `openGrib()`, `openBufr()` | `handle.delete()` |
+| String buffers | `getString()` (internal) | Automatic |
+| Array buffers | `getDoubleArray()` (internal) | Automatic |
+
+Only `CodesHandle` objects require manual cleanup.
 
 ```javascript
 // Create instance

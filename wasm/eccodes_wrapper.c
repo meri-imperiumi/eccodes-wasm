@@ -3,6 +3,9 @@
  *
  * This file provides a thin wrapper around key ecCodes functions
  * that will be exposed to JavaScript via Emscripten.
+ *
+ * All wrapper functions are prefixed with `wasm_` to avoid conflicts
+ * with the actual ecCodes API functions.
  */
 
 #include <stdio.h>
@@ -12,6 +15,10 @@
 #include <emscripten.h>
 
 #include "eccodes.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 // Error buffer for last error message
 #define ERROR_BUFFER_SIZE 1024
@@ -33,17 +40,22 @@ int codes_get_version() {
     return codes_get_api_version();
 }
 
+// Open a GRIB/BUFR file and return the first message handle.
+// product_kind: PRODUCT_GRIB or PRODUCT_BUFR
 EMSCRIPTEN_KEEPALIVE
-codes_handle* codes_handle_new_from_file(const char* path, ProductKind product_kind) {
+codes_handle* wasm_handle_new_from_file(const char* path, int product_kind) {
     FILE* f = fopen(path, "rb");
     if (!f) {
         snprintf(g_error_buffer, ERROR_BUFFER_SIZE, "Cannot open file: %s", path);
         return NULL;
     }
 
-    codes_handle* h = codes_handle_new_from_file(0, f, product_kind);
-    if (!h) {
-        snprintf(g_error_buffer, ERROR_BUFFER_SIZE, "Failed to create handle from file: %s", path);
+    int err = 0;
+    codes_handle* h = codes_handle_new_from_file(0, f, (ProductKind)product_kind, &err);
+    if (err != CODES_SUCCESS || !h) {
+        snprintf(g_error_buffer, ERROR_BUFFER_SIZE,
+                 "Failed to create handle from file '%s': %s",
+                 path, codes_get_error_message(err));
         fclose(f);
         return NULL;
     }
@@ -62,7 +74,7 @@ int codes_handle_delete_wrapper(codes_handle* h) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int codes_get_long(codes_handle* h, const char* key, long* value) {
+int codes_get_long_wrapper(codes_handle* h, const char* key, long* value) {
     if (!h || !key || !value) {
         set_error("NULL argument");
         return CODES_INVALID_ARGUMENT;
@@ -77,7 +89,7 @@ int codes_get_long(codes_handle* h, const char* key, long* value) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int codes_get_double(codes_handle* h, const char* key, double* value) {
+int codes_get_double_wrapper(codes_handle* h, const char* key, double* value) {
     if (!h || !key || !value) {
         set_error("NULL argument");
         return CODES_INVALID_ARGUMENT;
@@ -92,7 +104,7 @@ int codes_get_double(codes_handle* h, const char* key, double* value) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int codes_get_string(codes_handle* h, const char* key, char* value, size_t* length) {
+int codes_get_string_wrapper(codes_handle* h, const char* key, char* value, size_t* length) {
     if (!h || !key || !value || !length) {
         set_error("NULL argument");
         return CODES_INVALID_ARGUMENT;
@@ -107,7 +119,7 @@ int codes_get_string(codes_handle* h, const char* key, char* value, size_t* leng
 }
 
 EMSCRIPTEN_KEEPALIVE
-int codes_get_size(codes_handle* h, const char* key, size_t* size) {
+int codes_get_size_wrapper(codes_handle* h, const char* key, size_t* size) {
     if (!h || !key || !size) {
         set_error("NULL argument");
         return CODES_INVALID_ARGUMENT;
@@ -122,7 +134,7 @@ int codes_get_size(codes_handle* h, const char* key, size_t* size) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int codes_get_double_array(codes_handle* h, const char* key, double* values, size_t* length) {
+int codes_get_double_array_wrapper(codes_handle* h, const char* key, double* values, size_t* length) {
     if (!h || !key || !values || !length) {
         set_error("NULL argument");
         return CODES_INVALID_ARGUMENT;
@@ -137,7 +149,7 @@ int codes_get_double_array(codes_handle* h, const char* key, double* values, siz
 }
 
 EMSCRIPTEN_KEEPALIVE
-int codes_get_native_type(codes_handle* h, const char* key, int* type) {
+int codes_get_native_type_wrapper(codes_handle* h, const char* key, int* type) {
     if (!h || !key || !type) {
         set_error("NULL argument");
         return CODES_INVALID_ARGUMENT;
@@ -152,15 +164,22 @@ int codes_get_native_type(codes_handle* h, const char* key, int* type) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int codes_is_missing(codes_handle* h, const char* key) {
+int codes_is_missing_wrapper(codes_handle* h, const char* key) {
     if (!h || !key) {
         set_error("NULL argument");
         return 1;
     }
-    return codes_is_missing(h, key);
+    int err = 0;
+    int result = codes_is_missing(h, key, &err);
+    if (err != CODES_SUCCESS) {
+        snprintf(g_error_buffer, ERROR_BUFFER_SIZE,
+                 "codes_is_missing failed for key '%s': %s",
+                 key, codes_get_error_message(err));
+    }
+    return result;
 }
 
-// Get string value - allocates memory that must be freed
+// Get string value - allocates memory that must be freed with codes_free_string
 EMSCRIPTEN_KEEPALIVE
 char* codes_get_string_alloc(codes_handle* h, const char* key) {
     if (!h || !key) {
@@ -205,7 +224,7 @@ void codes_free_string(char* str) {
     free(str);
 }
 
-// Get double array - allocates memory that must be freed
+// Get double array - allocates memory that must be freed with codes_free_array
 EMSCRIPTEN_KEEPALIVE
 double* codes_get_double_array_alloc(codes_handle* h, const char* key, size_t* length) {
     if (!h || !key || !length) {
@@ -250,37 +269,62 @@ void codes_free_array(void* ptr) {
 
 // Count messages in file
 EMSCRIPTEN_KEEPALIVE
-int codes_count_in_file(const char* path) {
-    int err = 0;
-    int count = codes_count_in_filename(path, &err);
+int codes_count_in_file_wrapper(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        snprintf(g_error_buffer, ERROR_BUFFER_SIZE, "Cannot open file: %s", path);
+        return -1;
+    }
+    int n = 0;
+    int err = codes_count_in_file(0, f, &n);
+    fclose(f);
     if (err != 0) {
         snprintf(g_error_buffer, ERROR_BUFFER_SIZE,
                  "Failed to count messages in file '%s': error %d", path, err);
         return -1;
     }
-    return count;
+    return n;
+}
+
+// Clone a handle
+EMSCRIPTEN_KEEPALIVE
+codes_handle* codes_handle_clone_wrapper(codes_handle* h) {
+    if (!h) {
+        set_error("NULL handle");
+        return NULL;
+    }
+    codes_handle* cloned = codes_handle_clone(h);
+    if (!cloned) {
+        set_error("Failed to clone handle");
+        return NULL;
+    }
+    return cloned;
 }
 
 // Initialize context with definitions path
 EMSCRIPTEN_KEEPALIVE
-int codes_context_set_definitions_path(codes_context* c, const char* path) {
+void codes_context_set_definitions_path_wrapper(codes_context* c, const char* path) {
     if (!c || !path) {
         set_error("NULL argument");
-        return CODES_INVALID_ARGUMENT;
+        return;
     }
-    return codes_context_set_definitions_path(c, path);
+    codes_context_set_definitions_path(c, path);
 }
 
 EMSCRIPTEN_KEEPALIVE
-int codes_context_set_samples_path(codes_context* c, const char* path) {
+void codes_context_set_samples_path_wrapper(codes_context* c, const char* path) {
     if (!c || !path) {
         set_error("NULL argument");
-        return CODES_INVALID_ARGUMENT;
+        return;
     }
-    return codes_context_set_samples_path(c, path);
+    codes_context_set_samples_path(c, path);
 }
 
 EMSCRIPTEN_KEEPALIVE
 codes_context* codes_context_get_default_wrapper() {
     return codes_context_get_default();
 }
+
+#ifdef __cplusplus
+}
+#endif

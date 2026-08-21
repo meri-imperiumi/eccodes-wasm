@@ -81,7 +81,7 @@ def git_clone(repo_url, tag, dest_dir):
     return dest_dir
 
 
-def build_openjpeg(src_dir, build_dir, install_dir):
+def build_openjpeg(src_dir, build_dir, install_dir, arch_cmake_flags=None):
     """Build OpenJPEG with Emscripten"""
     OPENJPEG_REPO = "https://github.com/uclouvain/openjpeg.git"
     OPENJPEG_TAG = "v2.5.2"  # Latest stable version
@@ -106,13 +106,13 @@ def build_openjpeg(src_dir, build_dir, install_dir):
         "-DBUILD_TESTING=OFF",
         "-DBUILD_EXAMPLES=OFF",
         "-DBUILD_CODEC=OFF",  # We only need the library
-        "-DBUILD_SHARED_LIBS=ON",
-    ]
+        "-DBUILD_SHARED_LIBS=OFF",
+    ] + (arch_cmake_flags or [])
     run_command(cmake_args)
 
-    # Build
+    # Build (use cmake directly; emcmake only needed for configure)
     build_args = [
-        "emcmake", "cmake",
+        "cmake",
         "--build", str(openjpeg_build_dir),
         "--parallel", str(os.cpu_count() or 4),
     ]
@@ -129,7 +129,7 @@ def build_openjpeg(src_dir, build_dir, install_dir):
     return openjpeg_install_dir
 
 
-def build_libaec(src_dir, build_dir, install_dir):
+def build_libaec(src_dir, build_dir, install_dir, arch_cmake_flags=None):
     """Build libaec (Adaptive Entropy Coding) with Emscripten"""
     AEC_REPO = "https://gitlab.dkrz.de/k202009/libaec.git"
     AEC_TAG = "v1.1.4"
@@ -150,13 +150,13 @@ def build_libaec(src_dir, build_dir, install_dir):
         "-B", str(aec_build_dir),
         f"-DCMAKE_INSTALL_PREFIX={aec_install_dir}",
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DBUILD_SHARED_LIBS=ON",
-    ]
+        "-DBUILD_SHARED_LIBS=OFF",
+    ] + (arch_cmake_flags or [])
     run_command(cmake_args)
 
-    # Build
+    # Build (use cmake directly; emcmake only needed for configure)
     build_args = [
-        "emcmake", "cmake",
+        "cmake",
         "--build", str(aec_build_dir),
         "--parallel", str(os.cpu_count() or 4),
     ]
@@ -180,7 +180,17 @@ def main():
     parser.add_argument("--source-dir", type=str, default="eccodes", help="ecCodes source directory")
     parser.add_argument("--enable-jpg", action="store_true", help="Enable JPEG support via OpenJPEG")
     parser.add_argument("--disable-aec", action="store_true", help="Disable AEC compression")
+    parser.add_argument("--wasm64", action="store_true", default=True, help="Build for wasm64 (64-bit pointers, default)")
+    parser.add_argument("--wasm32", action="store_true", help="Build for wasm32 (32-bit pointers)")
     args = parser.parse_args()
+
+    # Determine target bitness
+    if args.wasm32:
+        target_bits = 32
+        arch_flag = []
+    else:
+        target_bits = 64
+        arch_flag = ["-m64"]
 
     # Find repository root and wasm directory
     script_dir = Path(__file__).parent
@@ -194,6 +204,16 @@ def main():
     # Enable/disable flags
     enable_jpg = args.enable_jpg
     enable_aec = not args.disable_aec
+
+    # Set compiler flags for target bitness
+    if target_bits == 64:
+        os.environ["CFLAGS"] = os.environ.get("CFLAGS", "") + " -m64"
+        os.environ["CXXFLAGS"] = os.environ.get("CXXFLAGS", "") + " -m64"
+        arch_cmake_flags = ["-DCMAKE_C_FLAGS=-m64", "-DCMAKE_CXX_FLAGS=-m64"]
+        print("Building for wasm64 (64-bit pointers)")
+    else:
+        arch_cmake_flags = []
+        print("Building for wasm32 (32-bit pointers)")
 
     # Check emscripten
     check_emscripten()
@@ -212,10 +232,10 @@ def main():
     aec_install_dir = None
 
     if enable_jpg:
-        openjpeg_install_dir = build_openjpeg(src_dir, build_dir, install_dir)
+        openjpeg_install_dir = build_openjpeg(src_dir, build_dir, install_dir, arch_cmake_flags)
 
     if enable_aec:
-        aec_install_dir = build_libaec(src_dir, build_dir, install_dir)
+        aec_install_dir = build_libaec(src_dir, build_dir, install_dir, arch_cmake_flags)
 
     # CMake configuration with CMAKE_PREFIX_PATH for dependencies
     cmake_prefix_path = str(install_dir)
@@ -223,6 +243,15 @@ def main():
         cmake_prefix_path += f";{openjpeg_install_dir}"
     if aec_install_dir:
         cmake_prefix_path += f";{aec_install_dir}"
+
+    # Explicit package config dirs for find_package
+    package_dir_args = []
+    if openjpeg_install_dir:
+        opj_dir = openjpeg_install_dir / "lib" / "cmake" / "openjpeg-2.5"
+        package_dir_args.append(f"-Dopenjpeg_DIR={opj_dir}")
+    if aec_install_dir:
+        aec_dir = aec_install_dir / "lib" / "cmake" / "libaec"
+        package_dir_args.append(f"-Dlibaec_DIR={aec_dir}")
 
     print(f"\nCMAKE_PREFIX_PATH: {cmake_prefix_path}")
 
@@ -247,45 +276,96 @@ def main():
         "-DENABLE_PNG=OFF",
         "-DENABLE_NETCDF=OFF",
         "-DENABLE_MEMFS=ON",
+        "-DDISABLE_OS_CHECK=ON",
+        "-DIEEE_LE=1",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DENABLE_USE_SHARED_LIB_AEC=OFF",
         f"-DCMAKE_PREFIX_PATH={cmake_prefix_path}",
-    ]
+    ] + package_dir_args + arch_cmake_flags
 
     print(f"\nConfiguring ecCodes {ecodes_version} with Emscripten...")
     run_command(cmake_args)
 
-    # Build
+    # Build (use cmake directly; emcmake only needed for configure)
     print(f"\nBuilding ecCodes {ecodes_version}...")
     build_args = [
-        "emcmake", "cmake",
+        "cmake",
         "--build", str(build_dir),
+        "--target", "eccodes",
         "--parallel", str(os.cpu_count() or 4),
     ]
     run_command(build_args)
 
-    # Install
+    # Install - skip if it fails (we use the build dir directly)
     print("\nInstalling ecCodes...")
     install_args = [
         "cmake",
         "--install", str(build_dir),
     ]
-    run_command(install_args)
+    install_result = subprocess.run(install_args, check=False)
+    if install_result.returncode != 0:
+        print(f"Warning: install step failed (code {install_result.returncode}), using build directory directly")
+        # Create a manual install layout
+        import glob
+        install_dir.mkdir(parents=True, exist_ok=True)
+        # Copy headers
+        src_include = source_dir / "src" / "eccodes"
+        build_include = build_dir / "src" / "eccodes"
+        inc_dest = install_dir / "include"
+        inc_dest.mkdir(parents=True, exist_ok=True)
+        for h in ["eccodes.h", "grib_api.h", "eccodes_windef.h"]:
+            for inc_path in [build_include, src_include]:
+                src_h = inc_path / h
+                if src_h.exists():
+                    shutil.copy2(src_h, inc_dest / h)
+                    break
+        # Copy generated headers from build
+        for h in ["eccodes_version.h", "eccodes_config.h", "eccodes_ecbuild_config.h"]:
+            for inc_path in [build_dir / "src" / "eccodes", build_dir, build_dir / "src"]:
+                src_h = inc_path / h
+                if src_h.exists():
+                    shutil.copy2(src_h, inc_dest / h)
+                    break
+        # Copy libraries from build dir
+        lib_dest = install_dir / "lib"
+        lib_dest.mkdir(parents=True, exist_ok=True)
+        for libfile in glob.glob(str(build_dir / "lib" / "libeccodes*")):
+            shutil.copy2(libfile, lib_dest / Path(libfile).name)
+        for libfile in glob.glob(str(build_dir / "lib" / "libeccodes_memfs*")):
+            shutil.copy2(libfile, lib_dest / Path(libfile).name)
+        print(f"Manual install to: {install_dir}")
 
     # Now build the WASM library with bindings
     wasm_build_dir = build_dir / "wasm_module"
     wasm_build_dir.mkdir(exist_ok=True)
 
-    # Collect libraries to link
-    link_libs = [f"-L{install_dir}/lib", "-leccodes"]
+    # Collect libraries to link (static libraries)
+    link_libs = [f"-L{install_dir}/lib", f"-L{build_dir / 'lib'}"]
+    # eccodes static libs - use -Wl,--whole-archive to ensure all accessor builders and definitions are included
+    # (static registration objects would otherwise be dropped as dead code)
+    link_libs.append("-Wl,--whole-archive")
+    for libname in ["eccodes", "eccodes_memfs"]:
+        libfile_a = install_dir / "lib" / f"lib{libname}.a"
+        libfile_b = build_dir / "lib" / f"lib{libname}.a"
+        if libfile_a.exists():
+            link_libs.append(f"{libfile_a}")
+        elif libfile_b.exists():
+            link_libs.append(f"{libfile_b}")
+        else:
+            link_libs.append(f"-l{libname}")
+    link_libs.append("-Wl,--no-whole-archive")
     if openjpeg_install_dir:
-        link_libs.extend([
-            f"-L{openjpeg_install_dir}/lib",
-            "-lopenjp2",
-        ])
+        libfile = openjpeg_install_dir / "lib" / "libopenjp2.a"
+        if libfile.exists():
+            link_libs.append(f"{libfile}")
+        else:
+            link_libs.extend([f"-L{openjpeg_install_dir}/lib", "-lopenjp2"])
     if aec_install_dir:
-        link_libs.extend([
-            f"-L{aec_install_dir}/lib",
-            "-laec",
-        ])
+        libfile = aec_install_dir / "lib" / "libaec.a"
+        if libfile.exists():
+            link_libs.append(f"{libfile}")
+        else:
+            link_libs.extend([f"-L{aec_install_dir}/lib", "-laec"])
 
     # Also add include paths
     include_paths = [f"-I{install_dir}/include"]
@@ -294,18 +374,53 @@ def main():
     if aec_install_dir:
         include_paths.append(f"-I{aec_install_dir}/include")
 
+    # Functions to export from the WASM module
+    exported_functions = [
+        '_codes_get_last_error',
+        '_codes_get_version',
+        '_wasm_handle_new_from_file',
+        '_codes_handle_delete_wrapper',
+        '_codes_get_long_wrapper',
+        '_codes_get_double_wrapper',
+        '_codes_get_string_wrapper',
+        '_codes_get_size_wrapper',
+        '_codes_get_double_array_wrapper',
+        '_codes_get_native_type_wrapper',
+        '_codes_is_missing_wrapper',
+        '_codes_get_string_alloc',
+        '_codes_free_string',
+        '_codes_get_double_array_alloc',
+        '_codes_free_array',
+        '_codes_count_in_file_wrapper',
+        '_codes_handle_clone_wrapper',
+        '_codes_context_set_definitions_path_wrapper',
+        '_codes_context_set_samples_path_wrapper',
+        '_codes_context_get_default_wrapper',
+        '_codes_memfs_exists',
+        '_malloc',
+        '_free',
+    ]
+    export_list = "[" + ",".join(f"'{f}'" for f in exported_functions) + "]"
+
     # Link ecCodes as a shared library and create WASM module
     print("\nCreating WASM module...")
     wasm_args = [
-        "emcc",
+        "em++",
         "-o", str(wasm_build_dir / "eccodes.js"),
+    ] + arch_flag + [
         "-s", "WASM=1",
         "-s", "MODULARIZE=1",
         "-s", "EXPORT_NAME=\"createEccodes\"",
-        "-s", "EXPORTED_RUNTIME_METHODS=['cwrap','FS','getValue','UTF8ToString']",
+        "-s", f"EXPORTED_FUNCTIONS={export_list}",
+        "-s", "EXPORTED_RUNTIME_METHODS=['cwrap','FS','getValue','UTF8ToString','stringToNewUTF8','allocateUTF8','writeArrayToMemory','HEAP8','HEAP16','HEAP32','HEAP64','HEAPU8','HEAPU16','HEAPU32','HEAPU64','HEAPF32','HEAPF64']",
         "-s", "ALLOW_MEMORY_GROWTH=1",
         "-s", "MAXIMUM_MEMORY=512MB",
+        "-s", "INITIAL_MEMORY=64MB",
+        "-s", "STACK_SIZE=1MB",
         "-s", "FORCE_FILESYSTEM=1",
+        "-s", "NO_DISABLE_EXCEPTION_CATCHING=1",
+        "-lnodefs.js",
+        "-lc++",
     ] + include_paths + link_libs + [
         str(script_dir / "eccodes_wrapper.c"),
     ]
@@ -331,8 +446,8 @@ def main():
 
     # Copy resources if memfs is not enabled
     memfs_share = install_dir / "share" / "eccodes"
+    resources_dest = final_output / "resources"
     if memfs_share.exists():
-        resources_dest = final_output / "resources"
         shutil.copytree(memfs_share, resources_dest, dirs_exist_ok=True)
         print(f"Copied resources to {resources_dest}")
 
