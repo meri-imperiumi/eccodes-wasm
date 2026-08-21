@@ -167,6 +167,7 @@ def build_openjpeg(src_dir, build_dir, install_dir, arch_cmake_flags=None):
         "-DBUILD_EXAMPLES=OFF",
         "-DBUILD_CODEC=OFF",  # We only need the library
         "-DBUILD_SHARED_LIBS=OFF",
+        "-DOPJ_USE_THREAD=OFF",  # Emscripten has no pthreads
     ] + (arch_cmake_flags or [])
     run_command(cmake_args)
 
