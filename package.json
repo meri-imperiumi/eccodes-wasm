@@ -1,6 +1,6 @@
 {
   "name": "@meri-imperiumi/eccodes-wasm",
-  "version": "2.49.0",
+  "version": "2.48.1",
   "description": "WebAssembly (WASM) build of ECMWF ecCodes for Node.js and browsers - decode GRIB and BUFR files in JavaScript",
   "main": "index.js",
   "scripts": {
@@ -47,8 +47,10 @@
   },
   "files": [
     "index.js",
+    "wasm/eccodes.js",
     "build/eccodes/eccodes.js",
     "build/eccodes/eccodes.wasm",
+    "build/eccodes/index.js",
     "build/eccodes/resources",
     "README.md",
     "LICENSE"

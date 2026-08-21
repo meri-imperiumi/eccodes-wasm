@@ -229,6 +229,60 @@ class Eccodes {
     constructor(module) {
         this._module = module;
         this._context = this._module._codes_context_get_default_wrapper();
+        /** @type {Map<string, string>} host dir -> virtual mount point */
+        this._hostMounts = new Map();
+    }
+
+    /**
+     * Mount a host directory into the virtual filesystem (lazily, idempotent).
+     * Returns the virtual mount point path.
+     */
+    _mountHostDir(hostDir) {
+        const path = require('path');
+        const absDir = path.resolve(hostDir);
+        if (this._hostMounts.has(absDir)) {
+            return this._hostMounts.get(absDir);
+        }
+        const FS = this._module.FS;
+        if (!FS || !FS.filesystems.NODEFS) {
+            throw new EccodesError('NODEFS not available in WASM module', -1);
+        }
+        const mountPoint = `/hostfs/${this._hostMounts.length}`;
+        try {
+            FS.mkdirTree(mountPoint);
+            FS.mount(FS.filesystems.NODEFS, { root: absDir }, mountPoint);
+        } catch (e) {
+            throw new EccodesError(`Failed to mount host directory ${absDir}: ${e.message}`, -1);
+        }
+        this._hostMounts.set(absDir, mountPoint);
+        return mountPoint;
+    }
+
+    /**
+     * Resolve a path for use with ecCodes:
+     * - If the path exists in the virtual filesystem, use it as-is
+     * - Otherwise, if it is a readable host file, lazily mount its
+     *   parent directory and return the virtual path
+     */
+    _resolvePath(filePath) {
+        const FS = this._module.FS;
+        if (FS && FS.analyzePath(filePath).exists) {
+            return filePath;
+        }
+        const fs = require('fs');
+        const path = require('path');
+        const hostPath = path.isAbsolute(filePath)
+            ? filePath
+            : path.resolve(process.cwd(), filePath);
+        try {
+            if (fs.statSync(hostPath).isFile()) {
+                const mountPoint = this._mountHostDir(path.dirname(hostPath));
+                return `${mountPoint}/${path.basename(hostPath)}`;
+            }
+        } catch (e) {
+            // Not a host file either; fall through and let ecCodes report the error
+        }
+        return filePath;
     }
 
     /**
@@ -324,8 +378,9 @@ class Eccodes {
      * Open a file with specified product kind
      */
     openFile(path, productKind = 0) {
+        const resolved = this._resolvePath(path);
         // Allocate the path string on the WASM heap (wasm64 requires manual string marshaling)
-        const pathPtr = this._strToPtr(path);
+        const pathPtr = this._strToPtr(resolved);
         try {
             const handle = this._module._wasm_handle_new_from_file(pathPtr, productKind);
             if (!handle) {
@@ -343,7 +398,8 @@ class Eccodes {
      * Count messages in a file
      */
     countInFile(path) {
-        const pathPtr = this._strToPtr(path);
+        const resolved = this._resolvePath(path);
+        const pathPtr = this._strToPtr(resolved);
         try {
             const count = this._module._codes_count_in_file_wrapper(pathPtr);
             if (count < 0) {
@@ -361,6 +417,12 @@ class Eccodes {
      * Mount Node.js filesystem to Emscripten's virtual filesystem
      */
     mountFilesystem(root = '.') {
+        const path = require('path');
+        const absRoot = path.resolve(root);
+        // Already mounted at /data with the same root? No-op.
+        if (this._hostMounts.get(absRoot) === '/data') {
+            return;
+        }
         const FS = this._module.FS;
         if (!FS) {
             throw new EccodesError('Filesystem not available in WASM module', -1);
@@ -374,7 +436,8 @@ class Eccodes {
         }
 
         // Mount Node.js filesystem using NODEFS backend
-        FS.mount(this._module.FS.filesystems.NODEFS, { root: root }, '/data');
+        FS.mount(this._module.FS.filesystems.NODEFS, { root: absRoot }, '/data');
+        this._hostMounts.set(absRoot, '/data');
     }
 
     /**
