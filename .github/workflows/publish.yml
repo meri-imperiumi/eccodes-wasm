@@ -31,9 +31,10 @@ jobs:
           package-manager-cache: false  # never use caching in release builds
 
       - name: Install Emscripten
-        uses: mymindsetup/setup-emscripten@v2
+        uses: emscripten-core/emsdk@v3
         with:
           version: '3.1.58'
+          actions: 'setup'
 
       - name: Install CMake
         uses: jwlawson/actions-setup-cmake@v2
