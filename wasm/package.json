@@ -1,0 +1,47 @@
+{
+  "name": "@eccodes/wasm",
+  "version": "2.49.0",
+  "description": "WebAssembly build of ECMWF ecCodes for Node.js",
+  "main": "eccodes.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "python build_wasm.py --release",
+    "build:debug": "python build_wasm.py",
+    "test": "node test/basic.js",
+    "example": "node example/usage.js",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "eccodes",
+    "grib",
+    "bufr",
+    "wasm",
+    "webassembly",
+    "meteorological",
+    "weather"
+  ],
+  "author": "ECMWF",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ecmwf/eccodes.git",
+    "directory": "wasm"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "eccodes.js",
+    "build/wasm/eccodes/*.js",
+    "build/wasm/eccodes/*.wasm",
+    "build/wasm/eccodes/resources",
+    "README.md"
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ]
+}

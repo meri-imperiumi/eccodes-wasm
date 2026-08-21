@@ -1,0 +1,26 @@
+# Git modules for eccodes-wasm
+#
+# To add ecCodes as a submodule:
+#   git submodule add -b 2.49.0 https://github.com/ecmwf/eccodes.git eccodes
+#
+# To update to a different version:
+#   cd eccodes && git checkout 2.50.0 && cd ..
+#   git add eccodes
+#   git commit -m "Update ecCodes to 2.50.0"
+#
+# To initialize/update submodules:
+#   git submodule update --init --recursive
+
+# Uncomment and use one of these approaches:
+
+# Option 1: Specific version tag (recommended for releases)
+# [submodule "eccodes"]
+#   path = eccodes
+#   url = https://github.com/ecmwf/eccodes.git
+#   branch = 2.49.0
+
+# Option 2: Development branch (for development)
+# [submodule "eccodes"]
+#   path = eccodes
+#   url = https://github.com/ecmwf/eccodes.git
+#   branch = develop

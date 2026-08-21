@@ -1,0 +1,49 @@
+# Build outputs
+build/
+*.wasm
+!build/wasm/eccodes/eccodes.wasm
+
+# Packages
+packages/
+*.tar.gz
+*.tar.bz2
+
+# ecCodes source (when not using git submodule)
+/eccodes/
+
+# Node modules
+node_modules/
+
+# Test output
+test/output/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Emscripten cache
+.emscripten_cache/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# NPM
+package-lock.json
+node_modules/

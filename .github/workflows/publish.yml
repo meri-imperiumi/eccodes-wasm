@@ -1,0 +1,98 @@
+name: Publish to NPM
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 2.49.0)'
+        required: true
+        type: string
+
+permissions:
+  id-token: write  # Required for OIDC
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          package-manager-cache: false  # never use caching in release builds
+
+      - name: Install Emscripten
+        uses: mymindsetup/setup-emscripten@v2
+        with:
+          version: '3.1.58'
+
+      - name: Install CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Setup ecCodes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            make download VERSION=${{ github.event.inputs.version }}
+          else
+            TAG=${GITHUB_REF#refs/tags/v}
+            make setup TAG=${TAG}
+          fi
+
+      - name: Build Release
+        run: make release
+
+      - name: Run Tests
+        run: make test
+
+      - name: Pre-publish Check
+        run: node scripts/prepublish-check.js
+
+      - name: Sync Version
+        run: node scripts/version.js
+
+  publish-npm:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false  # never use caching in release builds
+
+      - name: Build Release
+        run: make release
+
+      - name: Publish to NPM
+        run: |
+          echo "Publishing @meri-imperiumi/eccodes-wasm@$(node -p "require('./package.json').version")"
+          npm publish
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            build/eccodes/eccodes.js
+            build/eccodes/eccodes.wasm
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

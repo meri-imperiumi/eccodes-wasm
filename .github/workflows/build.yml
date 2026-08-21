@@ -1,0 +1,117 @@
+name: Build WASM
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (${{ matrix.feature }}${{ matrix.release && ' (release)' || '' }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: [basic, jpg]
+        release: [false, true]
+        exclude:
+          - feature: basic
+            release: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Emscripten
+        uses: mymindsetup/setup-emscripten@v2
+        with:
+          version: '3.1.58'
+
+      - name: Install CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.27.x'
+
+      - name: Setup ecCodes
+        run: make download VERSION=2.49.0
+
+      - name: Build
+        run: |
+          if [ "${{ matrix.feature }}" = "jpg" ]; then
+            if [ "${{ matrix.release }}" = "true" ]; then
+              make release
+            else
+              make build-jpg
+            fi
+          else
+            make build
+          fi
+
+      - name: Test
+        run: make test
+
+      - name: Check Build
+        run: node scripts/prepublish-check.js
+
+      - name: Get WASM size
+        run: |
+          echo "Build configuration: ${{ matrix.feature }}${{ matrix.release && ' release' || '' }}"
+          ls -lh build/eccodes/eccodes.wasm
+          wc -c < build/eccodes/eccodes.wasm
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eccodes-wasm-${{ matrix.feature }}${{ matrix.release && '-release' || '' }}
+          path: build/eccodes/
+          retention-days: 7
+
+  size-report:
+    name: Size Report
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate Report
+        run: |
+          echo "# WASM Build Sizes" > size-report.md
+          echo "" >> size-report.md
+          echo "| Configuration | Size (MB) |" >> size-report.md
+          echo "|--------------|----------|" >> size-report.md
+          for dir in artifacts/*/; do
+            name=$(basename "$dir")
+            size=$(du -m "$dir/eccodes.wasm" | cut -f1)
+            echo "| $name | $size MB |" >> size-report.md
+          done
+          cat size-report.md
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('size-report.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: report
+            })

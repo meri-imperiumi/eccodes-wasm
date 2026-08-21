@@ -1,0 +1,65 @@
+{
+  "name": "@meri-imperiumi/eccodes-wasm",
+  "version": "2.49.0",
+  "description": "WebAssembly (WASM) build of ECMWF ecCodes for Node.js and browsers - decode GRIB and BUFR files in JavaScript",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "make build",
+    "build:jpg": "make build-jpg",
+    "build:release": "make release",
+    "test": "make test",
+    "example": "make example",
+    "clean": "make clean",
+    "clean:all": "make deep-clean",
+    "setup": "make setup TAG=2.49.0",
+    "download": "make download VERSION=2.49.0",
+    "prepack": "make release",
+    "prepublishOnly": "node scripts/prepublish-check.js",
+    "version": "node scripts/version.js && git add .",
+    "publish": "make publish"
+  },
+  "keywords": [
+    "eccodes",
+    "eccodes-wasm",
+    "grib",
+    "bufr",
+    "wasm",
+    "webassembly",
+    "meteorological",
+    "weather",
+    "gridded-data",
+    "ecmwf"
+  ],
+  "author": "ECMWF",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meri-imperiumi/eccodes-wasm.git"
+  },
+  "homepage": "https://github.com/meri-imperiumi/eccodes-wasm#readme",
+  "bugs": {
+    "url": "https://github.com/meri-imperiumi/eccodes-wasm/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "index.js",
+    "build/eccodes/eccodes.js",
+    "build/eccodes/eccodes.wasm",
+    "build/eccodes/resources",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {},
+  "devDependencies": {},
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}
