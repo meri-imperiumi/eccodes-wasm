@@ -395,6 +395,45 @@ class Eccodes {
     }
 
     /**
+     * Iterate over every message in a multi-message GRIB/BUFR file, calling
+     * `cb(handle)` for each. Each handle is deleted automatically after the
+     * callback returns — this is the supported way to read files that contain
+     * more than one message (openGrib() only returns the first).
+     *
+     * forEachMessage(filePath, cb)              // GRIB (default)
+     * forEachMessage(filePath, productKind, cb)
+     */
+    forEachMessage(filePath, productKind, cb) {
+        if (typeof productKind === 'function') {
+            cb = productKind;
+            productKind = 0; // PRODUCT_GRIB
+        }
+        const resolved = this._resolvePath(filePath);
+        const pathPtr = this._strToPtr(resolved);
+        const itPtr = this._module._wasm_iterator_new(pathPtr);
+        this._free(pathPtr);
+        if (!itPtr) {
+            const lastError = this._module.UTF8ToString(Number(
+                this._module._codes_get_last_error()));
+            throw new EccodesError(lastError || `Failed to open file: ${filePath}`, -1);
+        }
+        try {
+            while (true) {
+                const handlePtr = this._module._wasm_iterator_next(itPtr, productKind);
+                if (!handlePtr) break; // end of file
+                const handle = new CodesHandle(this._module, handlePtr, productKind);
+                try {
+                    cb(handle);
+                } finally {
+                    handle.delete(); // WASM memory has no garbage collector
+                }
+            }
+        } finally {
+            this._module._wasm_iterator_free(itPtr);
+        }
+    }
+
+    /**
      * Count messages in a file
      */
     countInFile(path) {
@@ -447,6 +486,16 @@ class Eccodes {
         const FS = this._module.FS;
         if (!FS) {
             throw new EccodesError('Filesystem not available in WASM module', -1);
+        }
+
+        // Create parent directories so callers can write to arbitrary paths
+        // (e.g. '/work/msg.grib') without pre-creating the directory tree.
+        const slash = path.lastIndexOf('/');
+        if (slash > 0) {
+            const dir = path.substring(0, slash);
+            if (dir && !FS.analyzePath(dir).exists) {
+                FS.mkdirTree(dir);
+            }
         }
 
         if (typeof data === 'string') {

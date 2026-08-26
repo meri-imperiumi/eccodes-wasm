@@ -1,6 +1,6 @@
 {
   "name": "@meri-imperiumi/eccodes-wasm",
-  "version": "2.48.1",
+  "version": "2.48.2",
   "description": "WebAssembly (WASM) build of ECMWF ecCodes for Node.js and browsers - decode GRIB and BUFR files in JavaScript",
   "main": "index.js",
   "scripts": {

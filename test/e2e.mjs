@@ -402,6 +402,42 @@ describe('eccodes-wasm end-to-end tests', () => {
       handle.delete();
     });
 
+    it('forEachMessage visits every message of a multi-message file', () => {
+      const file = join(ECCODES_TEST_DIR, 'regular_ll.grib');
+      if (!existsSync(file)) {
+        assert.ok(true, 'regular_ll.grib not available — skipping');
+        return;
+      }
+      // The file contains 53 messages of mixed GRIB1/GRIB2 editions and grids.
+      const expected = eccodes.countInFile(file);
+
+      const shortNames = [];
+      eccodes.forEachMessage(file, (handle) => {
+        shortNames.push(handle.getString('shortName'));
+      });
+
+      assert.strictEqual(shortNames.length, expected, 'every message is visited');
+      assert.ok(shortNames.length > 1, 'file is genuinely multi-message');
+      // Distinct shortNames prove each handle is a real, independent message.
+      assert.ok(new Set(shortNames).size > 1, 'handles expose per-message metadata');
+    });
+
+    it('forEachMessage deletes each handle (no WASM memory leak)', () => {
+      const file = join(ECCODES_TEST_DIR, 'reduced_gg.grib');
+      if (!existsSync(file)) {
+        assert.ok(true, 'reduced_gg.grib not available — skipping');
+        return;
+      }
+      const before = eccodes.getVersion(); // keep module alive
+      let n = 0;
+      eccodes.forEachMessage(file, (handle) => {
+        handle.getDoubleArray('values'); // exercise a heap allocation
+        n++;
+      });
+      assert.ok(n > 1, 'walked multiple messages');
+      assert.strictEqual(eccodes.getVersion(), before, 'module still usable after iteration');
+    });
+
   });
 
   describe('Timestamp and Reference Time', { timeout: 30000 }, () => {

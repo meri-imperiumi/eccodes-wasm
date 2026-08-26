@@ -40,6 +40,59 @@ int codes_get_version() {
     return codes_get_api_version();
 }
 
+// File iterator: walk every message of a multi-message GRIB/BUFR file without
+// re-opening it. NULL returned by wasm_iterator_next signals end-of-file.
+typedef struct {
+    FILE* f;
+    codes_context* ctx;
+} wasm_file_iterator_t;
+
+EMSCRIPTEN_KEEPALIVE
+wasm_file_iterator_t* wasm_iterator_new(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        snprintf(g_error_buffer, ERROR_BUFFER_SIZE, "Cannot open file: %s", path);
+        return NULL;
+    }
+    wasm_file_iterator_t* it = (wasm_file_iterator_t*)malloc(sizeof(wasm_file_iterator_t));
+    if (!it) {
+        fclose(f);
+        set_error("Failed to allocate file iterator");
+        return NULL;
+    }
+    it->f = f;
+    it->ctx = codes_context_get_default();
+    return it;
+}
+
+// Returns the next message handle, or NULL at end of file / on error.
+EMSCRIPTEN_KEEPALIVE
+codes_handle* wasm_iterator_next(wasm_file_iterator_t* it, int product_kind) {
+    if (!it || !it->f) {
+        set_error("NULL iterator");
+        return NULL;
+    }
+    int err = 0;
+    codes_handle* h = codes_handle_new_from_file(it->ctx, it->f, (ProductKind)product_kind, &err);
+    if (h) return h;
+    // NULL: EOF (err == 0) or error (err != 0). Close the file either way.
+    if (err != CODES_SUCCESS) {
+        snprintf(g_error_buffer, ERROR_BUFFER_SIZE,
+                 "codes_handle_new_from_file failed: %s",
+                 codes_get_error_message(err));
+    }
+    fclose(it->f);
+    it->f = NULL;
+    return NULL;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_iterator_free(wasm_file_iterator_t* it) {
+    if (!it) return;
+    if (it->f) fclose(it->f);
+    free(it);
+}
+
 // Open a GRIB/BUFR file and return the first message handle.
 // product_kind: PRODUCT_GRIB or PRODUCT_BUFR
 EMSCRIPTEN_KEEPALIVE
