@@ -57,24 +57,50 @@ jobs:
             make build
           fi
 
-      - name: Test
-        run: make test
-
-      - name: Check Build
-        run: node scripts/prepublish-check.js
-
-      - name: Get WASM size
-        run: |
-          echo "Build configuration: ${{ matrix.feature }}${{ matrix.release && ' release' || '' }}"
-          ls -lh build/eccodes/eccodes.wasm
-          wc -c < build/eccodes/eccodes.wasm
-
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: eccodes-wasm-${{ matrix.feature }}${{ matrix.release && '-release' || '' }}
           path: build/eccodes/
           retention-days: 7
+
+  test:
+    name: Test (${{ matrix.os }} - ${{ matrix.feature }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        feature: [basic, jpg]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: eccodes-wasm-${{ matrix.feature }}
+          path: build/eccodes
+
+      - name: Get WASM size
+        shell: bash
+        run: |
+          echo "Build configuration: ${{ matrix.feature }}"
+          ls -lh build/eccodes/eccodes.wasm 2>/dev/null || echo "WASM file not found"
+          wc -c < build/eccodes/eccodes.wasm 2>/dev/null || echo "0"
+
+      - name: Test
+        run: node --test test/basic.mjs test/e2e.mjs
+
+      - name: Check Build
+        run: node scripts/prepublish-check.js
 
   size-report:
     name: Size Report
@@ -113,6 +139,6 @@ jobs:
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
-              repo: context.repo.repo,
+              repo: context.repo.owner,
               body: report
             })
