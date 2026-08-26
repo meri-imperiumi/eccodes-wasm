@@ -15,7 +15,6 @@
     "clean:all": "make deep-clean",
     "setup": "make setup TAG=2.49.0",
     "download": "make download VERSION=2.49.0",
-    "prepack": "make release",
     "prepublishOnly": "node scripts/prepublish-check.js",
     "version": "node scripts/version.js && git add .",
     "publish": "make publish"
@@ -32,7 +31,7 @@
     "gridded-data",
     "ecmwf"
   ],
-  "author": "ECMWF",
+  "author": "Henri Bergius <henri.bergius@iki.fi>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

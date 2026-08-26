@@ -1,4 +1,4 @@
-name: Publish to NPM
+name: Publish Node.js Package
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., 2.49.0)'
+        description: 'ecCodes version to publish (e.g., 2.49.0)'
         required: true
         type: string
 
 permissions:
-  id-token: write  # Required for OIDC
+  id-token: write  # Required for npm trusted publishing (OIDC)
   contents: read
 
 jobs:
@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: 24
           package-manager-cache: false  # never use caching in release builds
 
       - name: Install Emscripten
@@ -38,33 +38,38 @@ jobs:
         with:
           cmake-version: '3.27.x'
 
-      - name: Setup ecCodes
+      - name: Resolve ecCodes version
+        id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION=${{ github.event.inputs.version }}
+            VERSION="${{ inputs.version }}"
           else
-            VERSION=${GITHUB_REF#refs/tags/v}
-            # Strip package version suffix (e.g., v1.0.0 -> 2.48.1 for eccodes)
-            if ! git ls-remote --tags https://github.com/ecmwf/eccodes.git | grep -q "refs/tags/${VERSION}"; then
-              VERSION=2.48.1
-            fi
+            VERSION="${GITHUB_REF_NAME#v}"
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Setup ecCodes
+        run: |
           if [ ! -d eccodes/CMakeLists.txt ]; then
-            git clone --depth 1 --branch ${VERSION} https://github.com/ecmwf/eccodes.git eccodes
+            git clone --depth 1 --branch ${{ steps.version.outputs.version }} https://github.com/ecmwf/eccodes.git eccodes
           fi
           echo "ecCodes version: $(cat eccodes/VERSION)"
 
       - name: Build Release
         run: make release
 
-      - name: Run Tests
+      - name: Test
         run: make test
 
       - name: Pre-publish Check
         run: node scripts/prepublish-check.js
 
-      - name: Sync Version
-        run: node scripts/version.js
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build
+          path: build/eccodes/
+          retention-days: 1
 
   publish-npm:
     needs: build
@@ -76,42 +81,28 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: 24
           registry-url: https://registry.npmjs.org/
           package-manager-cache: false  # never use caching in release builds
 
-      - name: Install Emscripten
-        uses: emscripten-core/setup-emsdk@v15
-        with:
-          version: '6.0.8'
-
-      - name: Install CMake
-        uses: jwlawson/actions-setup-cmake@v2
-        with:
-          cmake-version: '3.27.x'
-
-      - name: Setup ecCodes
+      - name: Resolve version
+        id: version
         run: |
-          if [ ! -d eccodes/CMakeLists.txt ]; then
-            git clone --depth 1 --branch 2.48.1 https://github.com/ecmwf/eccodes.git eccodes
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build Release
-        run: make release
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-build
+          path: build/eccodes
+
+      - name: Sync package version
+        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
 
       - name: Publish to NPM
-        run: |
-          echo "Publishing @meri-imperiumi/eccodes-wasm@$(node -p "require('./package.json').version")"
-          npm publish
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            build/eccodes/eccodes.js
-            build/eccodes/eccodes.wasm
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --access public

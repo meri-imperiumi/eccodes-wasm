@@ -10,7 +10,7 @@
 #   deep-clean    - Remove everything including dependencies
 #   test          - Run tests
 #   example       - Run example
-#   publish       - Publish to NPM (requires OIDC setup)
+#   publish       - Publish to NPM manually (first release; subsequent via CI tags)
 
 .PHONY: help setup download build build-jpg release clean deep-clean test example publish
 
@@ -124,15 +124,9 @@ ci-test:
 	@node --test test/basic.mjs test/e2e.mjs
 
 # Publish
-publish:
-	@echo "Publishing to NPM via OIDC..."
-	@make release
-	@npm run version
+publish: release
+	@node scripts/prepublish-check.js
+	@npm publish --access public
 	@echo ""
-	@echo "To publish via CI, create and push a git tag:"
-	@echo "  git tag v2.49.0 && git push origin v2.49.0"
-	@echo ""
-	@echo "To publish manually, create an OIDC token:"
-	@echo "  npm token create --ci"
-	@echo "  npm config set //registry.npmjs.org/:_authToken <token>"
-	@echo "  npm publish --access public"
+	@echo "Published. Subsequent releases: push a git tag and CI publishes via trusted publishing:"
+	@echo "  git tag v$$(node -p "require('./package.json').version") && git push origin v$$(node -p "require('./package.json').version")"
