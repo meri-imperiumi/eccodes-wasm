@@ -83,6 +83,13 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Setup ecCodes
+        shell: bash
+        run: |
+          if [ ! -d eccodes/tests/grib_to_gridspec ]; then
+            git clone --depth 1 --branch 2.48.1 https://github.com/ecmwf/eccodes.git eccodes
+          fi
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -139,6 +146,6 @@ jobs:
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
-              repo: context.repo.owner,
+              repo: context.repo.repo,
               body: report
             })
