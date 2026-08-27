@@ -41,8 +41,10 @@ jobs:
 
       - name: Setup ecCodes
         run: |
+          ECCODES_VERSION=$(cat ECCODES_VERSION)
+          echo "Building ecCodes $ECCODES_VERSION"
           if [ ! -d eccodes/CMakeLists.txt ]; then
-            git clone --depth 1 --branch 2.48.1 https://github.com/ecmwf/eccodes.git eccodes
+            git clone --depth 1 --branch "$ECCODES_VERSION" https://github.com/ecmwf/eccodes.git eccodes
           fi
 
       - name: Build
@@ -86,8 +88,9 @@ jobs:
       - name: Setup ecCodes
         shell: bash
         run: |
+          ECCODES_VERSION=$(cat ECCODES_VERSION)
           if [ ! -d eccodes/tests/grib_to_gridspec ]; then
-            git clone --depth 1 --branch 2.48.1 https://github.com/ecmwf/eccodes.git eccodes
+            git clone --depth 1 --branch "$ECCODES_VERSION" https://github.com/ecmwf/eccodes.git eccodes
           fi
 
       - name: Download artifacts

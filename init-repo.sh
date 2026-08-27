@@ -26,7 +26,7 @@ cp -r wasm/* "$REPO_DIR/wasm/" 2>/dev/null || {
 }
 
 # Copy scripts (from current session)
-cat > "$REPO_DIR/scripts/setup.sh" << 'EOF'
+cat > "$REPO_DIR/scripts/setup.sh" << 'SETUP_SH_EOF'
 #!/bin/bash
 # setup.sh - Setup ecCodes as a git submodule
 
@@ -116,10 +116,10 @@ echo ""
 echo "To update to latest:"
 echo "  cd eccodes && git pull && cd .."
 echo ""
-EOF
+SETUP_SH_EOF
 chmod +x "$REPO_DIR/scripts/setup.sh"
 
-cat > "$REPO_DIR/scripts/download.sh" << 'EOF'
+cat > "$REPO_DIR/scripts/download.sh" << 'DOWNLOAD_SH_EOF'
 #!/bin/bash
 # download.sh - Download and extract ecCodes release tarball
 
@@ -239,7 +239,7 @@ echo ""
 echo "To build:"
 echo "  make build"
 echo ""
-EOF
+DOWNLOAD_SH_EOF
 chmod +x "$REPO_DIR/scripts/download.sh"
 
 cat > "$REPO_DIR/scripts/prepublish-check.js" << 'EOF'
@@ -280,39 +280,6 @@ console.log('Ready to publish to NPM');
 process.exit(0);
 EOF
 chmod +x "$REPO_DIR/scripts/prepublish-check.js"
-
-cat > "$REPO_DIR/scripts/version.js" << 'EOF'
-#!/usr/bin/env node
-const fs = require('fs');
-const path = require('path');
-
-const ECCODES_VERSION_FILE = path.join(__dirname, '..', 'eccodes', 'VERSION');
-const PACKAGE_FILE = path.join(__dirname, '..', 'package.json');
-
-console.log('Syncing package version with ecCodes version...');
-
-if (!fs.existsSync(ECCODES_VERSION_FILE)) {
-  console.error('❌ eccodes/VERSION not found. Run: make setup or make download');
-  process.exit(1);
-}
-
-const ecCodesVersion = fs.readFileSync(ECCODES_VERSION_FILE, 'utf8').trim();
-console.log(`  ecCodes version: ${ecCodesVersion}`);
-
-const pkg = JSON.parse(fs.readFileSync(PACKAGE_FILE, 'utf8'));
-
-if (pkg.version !== ecCodesVersion) {
-  console.log(`  Updating package version: ${pkg.version} → ${ecCodesVersion}`);
-  pkg.version = ecCodesVersion;
-  fs.writeFileSync(PACKAGE_FILE, JSON.stringify(pkg, null, 2) + '\n');
-  console.log('✓ Package version updated');
-} else {
-  console.log('  Versions already match');
-}
-
-process.exit(0);
-EOF
-chmod +x "$REPO_DIR/scripts/version.js"
 
 echo "✓ Created scripts"
 
@@ -648,7 +615,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., 2.49.0)'
+        description: 'NPM package version to publish (e.g., 2.48.2); ecCodes version is pinned in the ECCODES_VERSION file'
         required: true
         type: string
 
@@ -682,13 +649,7 @@ jobs:
           cmake-version: '3.27.x'
 
       - name: Setup ecCodes
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            make download VERSION=${{ github.event.inputs.version }}
-          else
-            TAG=${GITHUB_REF#refs/tags/v}
-            make setup TAG=${TAG}
-          fi
+        run: make setup TAG=$(cat ECCODES_VERSION)
 
       - name: Build Release
         run: make release
@@ -698,9 +659,6 @@ jobs:
 
       - name: Pre-publish Check
         run: node scripts/prepublish-check.js
-
-      - name: Sync Version
-        run: node scripts/version.js
 
   publish-npm:
     needs: build
@@ -717,6 +675,15 @@ jobs:
           node-version: '20'
           registry-url: https://registry.npmjs.org/
           package-manager-cache: false
+
+      - name: Sync package version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          npm version $VERSION --no-git-tag-version --allow-same-version
 
       - name: Build Release
         run: make release
@@ -819,11 +786,10 @@ cat > "$REPO_DIR/package.json" << 'EOF'
     "example": "make example",
     "clean": "make clean",
     "clean:all": "make deep-clean",
-    "setup": "make setup TAG=2.49.0",
-    "download": "make download VERSION=2.49.0",
+    "setup": "make setup",
+    "download": "make download",
     "prepack": "make release",
     "prepublishOnly": "node scripts/prepublish-check.js",
-    "version": "node scripts/version.js && git add .",
     "publish": "make publish"
   },
   "keywords": [
@@ -878,6 +844,9 @@ echo "✓ Created package.json"
 cat > "$REPO_DIR/Makefile" << 'EOF'
 .PHONY: help setup download build build-jpg release clean deep-clean test example publish
 
+# Pinned ecCodes version (single source of truth; also used by CI workflows)
+ECCODES_VERSION ?= $(shell cat ECCODES_VERSION 2>/dev/null)
+
 help:
 	@echo "eccodes-wasm Build System"
 	@echo ""
@@ -905,10 +874,10 @@ help:
 	@echo "  OUTPUT_DIR                  - Custom output directory"
 
 setup:
-	@./scripts/setup.sh $(if $(TAG),--tag $(TAG),$(if $(BRANCH),--branch $(BRANCH)))
+	@./scripts/setup.sh $(if $(TAG),--tag $(TAG),$(if $(BRANCH),--branch $(BRANCH),--tag $(ECCODES_VERSION)))
 
 download:
-	@./scripts/download.sh $(if $(VERSION),--version $(VERSION),)
+	@./scripts/download.sh $(if $(VERSION),--version $(VERSION),--version $(ECCODES_VERSION))
 
 build:
 	@python wasm/build_wasm.py
@@ -946,7 +915,7 @@ example:
 publish:
 	@echo "Publishing to NPM via OIDC..."
 	@make release
-	@npm run version
+	@npm publish --access public
 	@echo ""
 	@echo "To publish via CI, create and push a git tag:"
 	@echo "  git tag v2.49.0 && git push origin v2.49.0"
@@ -965,6 +934,10 @@ show-version:
 EOF
 
 echo "✓ Created Makefile"
+
+# Create ECCODES_VERSION pin (ecCodes version CI builds against)
+printf '2.49.0\n' > "$REPO_DIR/ECCODES_VERSION"
+echo "✓ Created ECCODES_VERSION"
 
 # Initialize git repository
 cd "$REPO_DIR"

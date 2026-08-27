@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'ecCodes version to publish (e.g., 2.49.0)'
+        description: 'NPM package version to publish (e.g., 2.48.2); ecCodes version is pinned in the ECCODES_VERSION file'
         required: true
         type: string
 
@@ -38,7 +38,7 @@ jobs:
         with:
           cmake-version: '3.27.x'
 
-      - name: Resolve ecCodes version
+      - name: Resolve versions
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -46,12 +46,15 @@ jobs:
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ECCODES_VERSION="$(cat ECCODES_VERSION)"
+          echo "npm_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "eccodes_version=$ECCODES_VERSION" >> "$GITHUB_OUTPUT"
+          echo "npm version: $VERSION (ecCodes: $ECCODES_VERSION)"
 
       - name: Setup ecCodes
         run: |
           if [ ! -d eccodes/CMakeLists.txt ]; then
-            git clone --depth 1 --branch ${{ steps.version.outputs.version }} https://github.com/ecmwf/eccodes.git eccodes
+            git clone --depth 1 --branch ${{ steps.version.outputs.eccodes_version }} https://github.com/ecmwf/eccodes.git eccodes
           fi
           echo "ecCodes version: $(cat eccodes/VERSION)"
 
@@ -85,7 +88,7 @@ jobs:
           registry-url: https://registry.npmjs.org/
           package-manager-cache: false  # never use caching in release builds
 
-      - name: Resolve version
+      - name: Resolve npm version
         id: version
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -93,7 +96,7 @@ jobs:
           else
             VERSION="${GITHUB_REF_NAME#v}"
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "npm_version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -102,7 +105,7 @@ jobs:
           path: build/eccodes
 
       - name: Sync package version
-        run: npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
+        run: npm version ${{ steps.version.outputs.npm_version }} --no-git-tag-version --allow-same-version
 
       - name: Publish to NPM
         run: npm publish --access public

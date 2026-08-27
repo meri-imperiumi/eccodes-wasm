@@ -27,8 +27,7 @@ eccodes/                          # Current repository (ECMWF's eccodes)
 ├── scripts/                      # Setup scripts
 │   ├── setup.sh                  # Git submodule setup
 │   ├── download.sh               # Release tarball download
-│   ├── prepublish-check.js       # Pre-publish validation
-│   └── version.js                # Version sync
+│   └── prepublish-check.js       # Pre-publish validation
 │
 ├── docs/wasm/                    # Documentation
 │   ├── README.md                 # WASM README
@@ -50,6 +49,8 @@ eccodes/                          # Current repository (ECMWF's eccodes)
 ├── package.json                  # NPM package config (root)
 │                                 # @meri-imperiumi/eccodes-wasm
 │
+├── ECCODES_VERSION               # Pinned ecCodes version for CI builds
+│
 ├── README_WASM.md                # WASM repository README (for new repo)
 │
 ├── init-repo.sh                  # Initialize new eccodes-wasm repository
@@ -68,7 +69,6 @@ eccodes/                          # Current repository (ECMWF's eccodes)
 - `scripts/setup.sh` - Setup ecCodes as git submodule
 - `scripts/download.sh` - Download release tarball
 - `scripts/prepublish-check.js` - Validate build before publish
-- `scripts/version.js` - Sync package version with ecCodes
 
 ### CI/CD
 - `.github/workflows/build.yml` - Build, test, and report

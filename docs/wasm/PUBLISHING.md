@@ -41,22 +41,24 @@ permissions:
 
 ```bash
 # Tag and push (triggers automated build and publish)
-git tag v2.49.0
-git push origin v2.49.0
+# The tag sets the NPM version; CI builds against the
+# ecCodes version pinned in the ECCODES_VERSION file
+git tag v2.48.2
+git push origin v2.48.2
 ```
 
 The GitHub Actions workflow will:
-1. Download/build ecCodes for the tagged version
+1. Clone ecCodes at the version pinned in `ECCODES_VERSION`
 2. Build the WASM module with all features
 3. Run tests
-4. Publish to NPM as `@meri-imperiumi/eccodes-wasm@2.49.0`
+4. Publish to NPM as `@meri-imperiumi/eccodes-wasm@2.48.2`
 5. Create a GitHub release
 
 ### Via Workflow Dispatch
 
 1. Go to Actions → Publish to NPM
 2. Click "Run workflow"
-3. Enter the version (e.g., `2.49.0`)
+3. Enter the NPM package version (e.g., `2.48.2`)
 4. Click "Run workflow"
 
 ## Manual Publishing
@@ -73,8 +75,8 @@ make release
 # Test
 make test
 
-# Sync version
-npm run version
+# Set the package version (independent of the ecCodes version)
+npm version 2.48.2 --no-git-tag-version
 
 # Publish (requires npm login with OIDC token)
 npm publish --access public
@@ -98,44 +100,50 @@ npm publish --access public
 
 ## Version Management
 
-### Package Version Format
+### Version Decoupling
 
-The package version follows the ecCodes version:
-- ecCodes `2.49.0` → `@meri-imperiumi/eccodes-wasm@2.49.0`
-- ecCodes `2.50.1` → `@meri-imperiumi/eccodes-wasm@2.50.1`
+The NPM package version and the ecCodes version are decoupled:
 
-### Syncing Versions
+- **ecCodes version**: pinned in the `ECCODES_VERSION` file — CI builds
+  against this version. Bump it in a commit when upgrading ecCodes.
+- **NPM version**: set by the release tag (`v2.48.2` → `@meri-imperiumi/eccodes-wasm@2.48.2`)
+  or the workflow dispatch input.
+
+This allows releasing packaging-only fixes (e.g., `2.48.2`, `2.48.3`, …)
+without an ecCodes upgrade.
+
+### Upgrading ecCodes
 
 ```bash
-# Auto-sync package version with ecCodes VERSION file
-npm run version
+# 1. Update the pin
+echo 2.50.0 > ECCODES_VERSION
 
-# This updates:
-# - package.json version
-# - Makefile VERSION variable
+# 2. Update your local checkout
+make setup TAG=2.50.0   # or: make download VERSION=2.50.0
+
+# 3. Commit both together, build, test, and release
+make release && make test
 ```
 
-### Version Bump for WASM-Only Changes
+### Releasing Packaging-Only Changes
 
-If you need a WASM-specific change without changing ecCodes version:
+For changes to the wrapper, packaging, or CI that don't touch ecCodes:
 
 ```bash
-# Add build number suffix
-npm version 2.49.0-build.1
-
-# Then publish
-npm publish --access public
+# Bump the NPM version and tag it
+git tag v2.48.2
+git push origin v2.48.2
 ```
 
 ## Publish Checklist
 
 Before publishing, ensure:
 
-- [ ] ecCodes source is at correct version (`make show-version`)
+- [ ] ecCodes source is at correct version (`make show-version`, matches `ECCODES_VERSION`)
 - [ ] Build succeeds (`make release`)
 - [ ] Tests pass (`make test`)
 - [ ] Prepublish check passes (`node scripts/prepublish-check.js`)
-- [ ] Version is synced (`npm run version`)
+- [ ] `ECCODES_VERSION` pin is up to date
 - [ ] `package.json` files field is correct
 - [ ] README is up to date
 - [ ] CHANGELOG.md is updated (if applicable)
@@ -186,13 +194,13 @@ Builds and tests all configurations:
 ### Publish Workflow (`.github/workflows/publish.yml`)
 
 Triggers on:
-- Git tags starting with `v`
-- Manual dispatch with version input
+- Git tags starting with `v` (tag name sets the NPM version)
+- Manual dispatch with NPM version input
 
 **Two Jobs:**
 
-1. **build**: Downloads ecCodes, builds WASM, runs tests, syncs version
-2. **publish-npm**: Builds release and publishes to NPM using OIDC
+1. **build**: Clones ecCodes (pinned in `ECCODES_VERSION`), builds WASM, runs tests
+2. **publish-npm**: Syncs the NPM version from the tag/input and publishes to NPM using OIDC
 
 **OIDC Flow:**
 ```yaml

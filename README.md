@@ -174,6 +174,9 @@ grib.delete();
 
 ### Update ecCodes Version
 
+Update the version pinned in `ECCODES_VERSION` (what CI builds
+against), then update your local checkout:
+
 ```bash
 # Git submodule
 make setup TAG=2.50.0
@@ -221,11 +224,13 @@ See [Repository Structure](./docs/wasm/REPOSITORY_STRUCTURE.md) for details.
 ### Automated (Recommended)
 
 ```bash
-git tag v2.49.0
-git push origin v2.49.0
+git tag v2.48.2
+git push origin v2.48.2
 ```
 
 Triggers GitHub Actions to build, test, and publish via OIDC.
+The tag sets the NPM version; CI builds against the ecCodes
+version pinned in the [ECCODES_VERSION](./ECCODES_VERSION) file.
 
 ### Manual
 

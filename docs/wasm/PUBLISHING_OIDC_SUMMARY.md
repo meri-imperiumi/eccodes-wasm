@@ -129,8 +129,8 @@ git push origin v2.49.0
 make release
 make test
 
-# Sync version
-npm run version
+# Set the package version (independent of the ecCodes version)
+npm version 2.48.2 --no-git-tag-version
 
 # Create OIDC token and publish
 npm token create --ci

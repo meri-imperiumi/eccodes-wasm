@@ -77,13 +77,13 @@ eccodes-wasm/                    # Fresh git history
 ├── scripts/                     # Helper scripts
 │   ├── setup.sh                # Git submodule setup
 │   ├── download.sh             # Release tarball download
-│   ├── prepublish-check.js     # Pre-publish validation
-│   └── version.js              # Version sync
+│   └── prepublish-check.js     # Pre-publish validation
 ├── .github/workflows/          # CI/CD
 │   ├── build.yml              # Build and test
 │   └── publish.yml            # Publish to NPM via OIDC
 ├── Makefile                    # Build targets
 ├── package.json                # NPM package config
+├── ECCODES_VERSION             # Pinned ecCodes version for CI builds
 ├── README.md                   # Main README
 ├── LICENSE                     # Apache 2.0
 ├── .gitignore                  # Git ignore
@@ -104,9 +104,9 @@ eccodes-wasm/                    # Fresh git history
 | `scripts/setup.sh` | Git submodule setup |
 | `scripts/download.sh` | Release tarball download |
 | `scripts/prepublish-check.js` | Pre-publish validation |
-| `scripts/version.js` | Version sync |
 | `.github/workflows/build.yml` | CI/CD build workflow |
 | `.github/workflows/publish.yml` | OIDC publishing workflow |
+| `ECCODES_VERSION` | Pinned ecCodes version for CI builds |
 
 ## Files to Copy Manually
 
@@ -232,7 +232,7 @@ git push origin v2.49.0
 
 ```bash
 make release
-npm run version
+make test
 npm token create --ci
 npm config set //registry.npmjs.org/:_authToken <token>
 npm publish --access public

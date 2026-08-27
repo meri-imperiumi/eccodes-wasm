@@ -14,6 +14,9 @@
 
 .PHONY: help setup download build build-jpg release clean deep-clean test example publish
 
+# Pinned ecCodes version (single source of truth; also used by CI workflows)
+ECCODES_VERSION ?= $(shell cat ECCODES_VERSION 2>/dev/null)
+
 # Default target
 help:
 	@echo "eccodes-wasm Build System"
@@ -21,6 +24,7 @@ help:
 	@echo "Setup:"
 	@echo "  make setup TAG=2.49.0       - Setup ecCodes as git submodule"
 	@echo "  make download VERSION=2.49.0 - Download release tarball"
+	@echo "  (both default to the version pinned in the ECCODES_VERSION file)"
 	@echo ""
 	@echo "Build:"
 	@echo "  make build                  - Build WASM (debug, AEC only)"
@@ -40,10 +44,10 @@ help:
 
 # Setup
 setup:
-	@./scripts/setup.sh $(if $(TAG),--tag $(TAG),$(if $(BRANCH),--branch $(BRANCH)))
+	@./scripts/setup.sh $(if $(TAG),--tag $(TAG),$(if $(BRANCH),--branch $(BRANCH),--tag $(ECCODES_VERSION)))
 
 download:
-	@./scripts/download.sh $(if $(VERSION),--version $(VERSION),)
+	@./scripts/download.sh $(if $(VERSION),--version $(VERSION),--version $(ECCODES_VERSION))
 
 # Build targets
 build:
@@ -66,7 +70,7 @@ deep-clean: clean
 test:
 	@echo "Running tests..."
 	@if [ -d "build/eccodes" ]; then \
-		node --test test/basic.mjs test/e2e.mjs; \
+		node --test test/basic.mjs test/e2e.mjs test/version.mjs; \
 	else \
 		echo "Error: Build not found. Run 'make build-jpg' first."; \
 		exit 1; \
@@ -112,7 +116,7 @@ show-version:
 ci-setup:
 	@echo "CI Setup..."
 	@if [ ! -d eccodes/CMakeLists.txt ]; then \
-		git clone --depth 1 --branch ${VERSION} https://github.com/ecmwf/eccodes.git eccodes; \
+		git clone --depth 1 --branch $(if $(VERSION),$(VERSION),$(ECCODES_VERSION)) https://github.com/ecmwf/eccodes.git eccodes; \
 	fi
 
 ci-build:
@@ -121,7 +125,7 @@ ci-build:
 
 ci-test:
 	@echo "CI Test..."
-	@node --test test/basic.mjs test/e2e.mjs
+	@node --test test/basic.mjs test/e2e.mjs test/version.mjs
 
 # Publish
 publish: release
