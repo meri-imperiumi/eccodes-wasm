@@ -16,8 +16,7 @@
     "clean:all": "make deep-clean",
     "setup": "make setup",
     "download": "make download",
-    "prepublishOnly": "node scripts/prepublish-check.js",
-    "publish": "make publish"
+    "prepublishOnly": "node scripts/prepublish-check.js"
   },
   "keywords": [
     "eccodes",

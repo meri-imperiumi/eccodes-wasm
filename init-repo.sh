@@ -660,6 +660,13 @@ jobs:
       - name: Pre-publish Check
         run: node scripts/prepublish-check.js
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build
+          path: build/eccodes/
+          retention-days: 1
+
   publish-npm:
     needs: build
     runs-on: ubuntu-latest
@@ -685,8 +692,11 @@ jobs:
           fi
           npm version $VERSION --no-git-tag-version --allow-same-version
 
-      - name: Build Release
-        run: make release
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-build
+          path: build/eccodes
 
       - name: Publish to NPM
         run: |
@@ -788,9 +798,7 @@ cat > "$REPO_DIR/package.json" << 'EOF'
     "clean:all": "make deep-clean",
     "setup": "make setup",
     "download": "make download",
-    "prepack": "make release",
-    "prepublishOnly": "node scripts/prepublish-check.js",
-    "publish": "make publish"
+    "prepublishOnly": "node scripts/prepublish-check.js"
   },
   "keywords": [
     "eccodes",
